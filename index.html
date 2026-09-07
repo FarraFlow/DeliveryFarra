@@ -141,11 +141,11 @@ body.gate-blocked #wizard.active{min-height:100vh;display:flex;align-items:cente
   background:var(--brass);
   color:#2a1a0c;font-weight:700;font-size:15px;letter-spacing:0.3px;
   padding:15px 30px;border-radius:999px;
-  box-shadow:0 6px 0 var(--brass-deep), 0 10px 18px rgba(0,0,0,0.4);
+  box-shadow:0 6px 0 var(--brass-deep);
   transition:transform .15s ease, box-shadow .15s ease;
   display:inline-flex;align-items:center;gap:8px;justify-content:center;
 }
-.cta-btn:hover{transform:translateY(2px);box-shadow:0 4px 0 var(--brass-deep), 0 6px 12px rgba(0,0,0,0.4);}
+.cta-btn:hover{transform:translateY(2px);box-shadow:0 4px 0 var(--brass-deep);}
 .cta-btn:active{transform:translateY(6px);box-shadow:0 0 0 var(--brass-deep);}
 .cta-btn:disabled{opacity:0.4;cursor:not-allowed;}
 .cta-btn.ghost{background:transparent;color:var(--chalk);box-shadow:none;border-color:var(--chalk-dim);}
@@ -209,6 +209,27 @@ body.gate-blocked #wizard.active{min-height:100vh;display:flex;align-items:cente
   font-weight:700;
 }
 .field-locked .lock-note{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--chalk-dim);font-weight:500;}
+
+/* calendario proprio (nao o seletor nativo do navegador) - so registra
+   uma data quando o usuario toca especificamente num dia da grade,
+   nunca sozinho so de abrir. */
+.data-input-row{display:flex;gap:8px;position:relative;}
+.data-input-row input{flex:1;min-width:0;}
+.cal-toggle-btn{flex:0 0 auto;width:44px;border-radius:6px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.04);color:var(--gold);display:flex;align-items:center;justify-content:center;}
+.cal-toggle-btn.on{border-color:var(--brass);background:rgba(201,138,75,0.16);}
+.calendario-popover{position:absolute;z-index:20;top:calc(100% + 8px);left:0;right:0;background:var(--ground-alt2);border:1px solid var(--brass);border-radius:10px;padding:12px;box-shadow:0 10px 24px rgba(0,0,0,0.5);}
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.cal-titulo{font-family:'Kalam',cursive;font-weight:700;font-size:15px;color:var(--chalk);}
+.cal-nav{width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.18);background:transparent;color:var(--chalk);display:flex;align-items:center;justify-content:center;}
+.cal-nav .icon{vertical-align:0;}
+.cal-semana{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:var(--chalk-dim);margin-bottom:4px;}
+.cal-grade{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.cal-cell{aspect-ratio:1;border:none;background:transparent;color:var(--chalk);font-size:13px;border-radius:50%;font-family:'Karla';}
+.cal-vazia{pointer-events:none;}
+.cal-cell:not(.cal-desabilitado):not(.cal-vazia):hover{background:rgba(255,255,255,0.1);}
+.cal-selecionado{background:var(--brass);color:#2a1a0c;font-weight:700;}
+.cal-desabilitado{color:var(--chalk-dim);opacity:0.3;cursor:not-allowed;}
+.cal-hoje:not(.cal-selecionado){border:1px solid var(--gold);}
 
 .responsavel-toggle{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:14px 16px;margin:6px 0 18px;}
 .responsavel-toggle-row{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--chalk);}
@@ -358,7 +379,7 @@ footer p{color:var(--chalk-dim);font-size:12.5px;margin:12px 0 0;}
 <footer class="chalkboard">
   <div class="brand"><img id="img-logo2" alt="Farra Bier" style="height:30px" /><span class="brand-word">FARRA <b>BIER</b></span></div>
   <div class="brass-rail" style="max-width:200px;margin:0 auto"></div>
-  <p>Farra Bier © 2026 <span style="opacity:0.7">— Atualizado em 07/09/2026 às 11:21</span></p>
+  <p>Farra Bier © 2026 <span style="opacity:0.7" id="footerAtualizado"></span></p>
 </footer>
 
 <a class="wa-fab" id="waFab" href="#" target="_blank" rel="noopener noreferrer" aria-label="Falar no WhatsApp">
@@ -821,22 +842,98 @@ function statusDataEvento(){
   else if(dataISO===hojeStr)msg='<p class="msg-error">'+ICON_WARN+' Pedidos para o mesmo dia estão sujeitos à disponibilidade de estoque e logística.</p>';
   return{dataISO,ok,msg};
 }
+
+// ==================== CALENDARIO PROPRIO (nao o seletor nativo do ====================
+// navegador) - so registra uma data quando o usuario toca num dia
+// especifico da grade. O <input type=date> nativo foi tentado antes,
+// mas no iOS o simples ato de ABRIR o seletor as vezes ja preenchia e
+// confirmava a data de hoje sozinho, sem nenhum toque do usuario - o
+// widget nativo do iOS fica "ao vivo" com o valor assim que abre, sem
+// um conceito real de cancelar. Um calendario proprio elimina isso por
+// completo, ja que a selecao so acontece no clique explicito num dia.
+let CAL_ABERTO=false, CAL_MES=null, CAL_CLIQUE_INTERNO=false;
+const MESES_PT=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+const DIAS_SEMANA_PT=["D","S","T","Q","Q","S","S"];
+function calendarioHtml(){
+  if(!CAL_ABERTO||!CAL_MES)return"";
+  const{ano,mes}=CAL_MES;
+  const hojeStr=new Date().toISOString().split("T")[0];
+  const totalDias=new Date(ano,mes+1,0).getDate();
+  const offset=new Date(ano,mes,1).getDay();
+  const selecionado=parseDataBR(W.dataDigitada);
+  let celulas="";
+  for(let i=0;i<offset;i++)celulas+='<span class="cal-cell cal-vazia"></span>';
+  for(let d=1;d<=totalDias;d++){
+    const iso=ano+"-"+String(mes+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+    const passado=iso<hojeStr;
+    const bloqueado=!!(DISP_ATUAL&&DISP_ATUAL.diasBloqueados&&DISP_ATUAL.diasBloqueados.includes(iso));
+    const desabilitado=passado||bloqueado;
+    const cls=["cal-cell"];
+    if(iso===selecionado)cls.push("cal-selecionado");
+    if(iso===hojeStr)cls.push("cal-hoje");
+    if(desabilitado)cls.push("cal-desabilitado");
+    celulas+=`<button type="button" class="${cls.join(" ")}" data-cal-dia="${iso}" ${desabilitado?"disabled":""}>${d}</button>`;
+  }
+  return `
+    <div class="calendario-popover" id="calendarioPopover">
+      <div class="cal-header">
+        <button type="button" class="cal-nav" id="calMesAnterior" aria-label="Mês anterior">${ICON_ARROW_LEFT}</button>
+        <span class="cal-titulo">${MESES_PT[mes][0].toUpperCase()+MESES_PT[mes].slice(1)} de ${ano}</span>
+        <button type="button" class="cal-nav" id="calMesSeguinte" aria-label="Próximo mês">${ICON_ARROW_RIGHT}</button>
+      </div>
+      <div class="cal-semana">${DIAS_SEMANA_PT.map(d=>`<span>${d}</span>`).join("")}</div>
+      <div class="cal-grade">${celulas}</div>
+    </div>`;
+}
+function wireCalendario(){
+  const pop=document.getElementById("calendarioPopover");
+  if(!pop)return;
+  pop.querySelectorAll("[data-cal-dia]").forEach(b=>b.addEventListener("click",()=>{
+    CAL_CLIQUE_INTERNO=true;
+    const iso=b.getAttribute("data-cal-dia");
+    const[y,m,d]=iso.split("-");
+    W.dataDigitada=d+"/"+m+"/"+y;
+    CAL_ABERTO=false;
+    const inp=document.getElementById("inpData");
+    if(inp)inp.value=W.dataDigitada;
+    atualizarDataEvento();
+  }));
+  document.getElementById("calMesAnterior").addEventListener("click",()=>{
+    CAL_CLIQUE_INTERNO=true;
+    CAL_MES.mes--;if(CAL_MES.mes<0){CAL_MES.mes=11;CAL_MES.ano--;}
+    atualizarDataEvento();
+  });
+  document.getElementById("calMesSeguinte").addEventListener("click",()=>{
+    CAL_CLIQUE_INTERNO=true;
+    CAL_MES.mes++;if(CAL_MES.mes>11){CAL_MES.mes=0;CAL_MES.ano++;}
+    atualizarDataEvento();
+  });
+}
 function stepData(){
   const{ok,msg}=statusDataEvento();
+  CAL_ABERTO=false;CAL_MES=null;
   return `
     ${ICON_CALENDAR}
     <h2 class="step-title hand">Data do Evento</h2>
     <p class="step-sub">Pra qual dia você quer o chopp? A disponibilidade dos estilos e equipamentos depende da data escolhida.</p>
-    <div class="field"><label>Data do evento</label><input type="text" inputmode="numeric" id="inpData" placeholder="DD/MM/AAAA" value="${W.dataDigitada||""}" maxlength="10"></div>
+    <div class="field">
+      <label>Data do evento</label>
+      <div class="data-input-row">
+        <input type="text" inputmode="numeric" id="inpData" placeholder="DD/MM/AAAA" value="${W.dataDigitada||""}" maxlength="10">
+        <button type="button" class="cal-toggle-btn" id="btnAbrirCalendario" aria-label="Abrir calendário">${ICON_CALENDAR}</button>
+        ${calendarioHtml()}
+      </div>
+    </div>
     <span id="msgData">${msg}</span>
     <div class="step-nav">
       <span></span>
       <button class="cta-btn hand" id="btnNext" ${ok?"":"disabled"}>Continuar ${ICON_ARROW_RIGHT}</button>
     </div>`;
 }
-// so atualiza a mensagem + o estado do botao (nunca reconstroi o card) -
-// mesmo motivo do passo "Seus dados": full render() a cada tecla troca o
-// elemento do botao Continuar bem na hora que o usuario for tocar nele.
+// so atualiza mensagem + estado do botao + o proprio calendario (nunca
+// reconstroi o card inteiro) - mesmo motivo do passo "Seus dados": full
+// render() a cada tecla/clique troca o elemento do botao Continuar bem
+// na hora que o usuario for tocar nele.
 function atualizarDataEvento(){
   const{dataISO,ok,msg}=statusDataEvento();
   W.data=dataISO||"";
@@ -844,6 +941,13 @@ function atualizarDataEvento(){
   if(el)el.innerHTML=msg;
   const btn=document.getElementById("btnNext");
   if(btn)btn.disabled=!ok;
+  const wrap=document.querySelector(".data-input-row");
+  const calBtn=document.getElementById("btnAbrirCalendario");
+  if(calBtn)calBtn.classList.toggle("on",CAL_ABERTO);
+  const popAtual=document.getElementById("calendarioPopover");
+  if(popAtual)popAtual.remove();
+  if(CAL_ABERTO&&wrap)wrap.insertAdjacentHTML("beforeend",calendarioHtml());
+  wireCalendario();
 }
 
 // ==================== STEP: MODALIDADE ====================
@@ -1425,16 +1529,50 @@ function wireStep(atual){
   if(btn && !btn.onclick) btn.addEventListener("click",()=>next());
 
   if(atual==="data"){
-    // campo digitado (DD/MM/AAAA), nao mais <input type=date>: o seletor
-    // nativo do iOS as vezes ja preenche/confirma "hoje" so de abrir o
-    // calendario, sem o usuario escolher nada, alem de nao caber direito
-    // na largura do cartao no celular. Mesmo padrao ja usado (e ja
-    // comprovado) no campo de Data de Nascimento.
+    // campo digitado (DD/MM/AAAA) com um calendario proprio ao lado (nao
+    // <input type=date>): o seletor nativo do iOS as vezes ja preenche/
+    // confirma "hoje" so de abrir, sem o usuario escolher nada, alem de
+    // nao caber direito na largura do cartao no celular. Digitar segue o
+    // mesmo padrao ja usado (e ja comprovado) no campo de Data de
+    // Nascimento; o botao de calendario oferece a mesma conveniencia
+    // visual de um seletor nativo, so que so confirma no toque explicito
+    // num dia.
     document.getElementById("inpData").addEventListener("input",e=>{
       e.target.value=fmtData(e.target.value);
       W.dataDigitada=e.target.value;
       atualizarDataEvento();
     });
+    document.getElementById("btnAbrirCalendario").addEventListener("click",()=>{
+      CAL_CLIQUE_INTERNO=true;
+      if(!CAL_ABERTO){
+        const base=parseDataBR(W.dataDigitada);
+        const ref=base?new Date(base+"T12:00:00"):new Date();
+        CAL_MES={ano:ref.getFullYear(),mes:ref.getMonth()};
+        CAL_ABERTO=true;
+      }else{
+        CAL_ABERTO=false;
+      }
+      atualizarDataEvento();
+    });
+    // toque fora do calendario fecha sem selecionar nada (troca o
+    // listener em vez de empilhar um novo a cada vez que essa etapa e
+    // renderizada, senao cada ida-e-volta pro passo "Data" deixaria mais
+    // um listener de clique preso no document pro resto da sessao)
+    if(window._fecharCalFora)document.removeEventListener("click",window._fecharCalFora);
+    window._fecharCalFora=e=>{
+      // cliques internos (dia, mes anterior/seguinte, abrir/fechar) ja se
+      // resolveram nos proprios handlers acima - ignora aqui. Necessario
+      // porque handlers internos re-renderizam o popup na hora (removendo
+      // e recriando o elemento clicado), entao quando esse listener do
+      // document roda na fase de bubble o alvo original do clique ja foi
+      // desanexado do DOM e "wrap.contains(e.target)" mentiria dizendo
+      // que o clique foi "fora".
+      if(CAL_CLIQUE_INTERNO){CAL_CLIQUE_INTERNO=false;return;}
+      if(!CAL_ABERTO)return;
+      const wrap=document.querySelector(".data-input-row");
+      if(wrap&&!wrap.contains(e.target)){CAL_ABERTO=false;atualizarDataEvento();}
+    };
+    document.addEventListener("click",window._fecharCalFora);
   }
   if(atual==="barris"){
     card.querySelectorAll("[data-barril-inc]").forEach(b=>b.addEventListener("click",()=>{
@@ -1507,6 +1645,20 @@ document.getElementById("img-hat").src=IMG_HAT;
 document.getElementById("img-farra-word").src=IMG_FARRA_WORD;
 
 document.getElementById("waFab").href="https://api.whatsapp.com/send?phone="+WHATSAPP_DUVIDAS+"&text="+encodeURIComponent("Olá! Tenho uma dúvida sobre o pedido de chopp.");
+
+// data/hora da ultima publicacao no rodape - automatico, direto do
+// cabecalho HTTP "Last-Modified" que o GitHub Pages ja manda pra
+// qualquer arquivo (document.lastModified reflete esse cabecalho), sem
+// precisar editar nenhum texto manualmente a cada publicacao.
+(function(){
+  const el=document.getElementById("footerAtualizado");
+  const d=new Date(document.lastModified);
+  if(el&&!isNaN(d)){
+    const dataStr=d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});
+    const horaStr=d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    el.textContent="— Atualizado em "+dataStr+" às "+horaStr;
+  }
+})();
 
 // ==================== INICIALIZACAO: ja abre direto na verificacao de idade ====================
 document.getElementById("wizard").classList.add("active");
