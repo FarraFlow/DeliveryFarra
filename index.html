@@ -209,7 +209,6 @@ body.gate-blocked #wizard.active{min-height:100vh;display:flex;align-items:cente
   font-weight:700;
 }
 .field-locked .lock-note{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--chalk-dim);font-weight:500;}
-.field input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.8);}
 
 .responsavel-toggle{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:14px 16px;margin:6px 0 18px;}
 .responsavel-toggle-row{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--chalk);}
@@ -297,7 +296,12 @@ body.gate-blocked #wizard.active{min-height:100vh;display:flex;align-items:cente
 .running-total .amt{color:var(--brass-bright);font-size:17px;}
 
 .step-nav{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;margin-top:22px;}
-.step-nav .cta-btn{flex:0 0 auto;padding:13px 22px;font-size:14px;}
+/* Voltar/Continuar sempre no mesmo tamanho (metade cada, com o mesmo
+   gap entre eles) em vez de auto-ajustar ao proprio texto - "Continuar"
+   e "Confirmar no WhatsApp" tem tamanhos de texto bem diferentes, mas os
+   dois botoes da mesma etapa devem parecer um par, nao dois tamanhos
+   diferentes. Mesma regra pro celular e pro desktop. */
+.step-nav .cta-btn{flex:1 1 0;padding:13px 16px;font-size:14px;white-space:normal;text-align:center;}
 
 .resumo-line{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed rgba(255,255,255,0.12);font-size:13.5px;}
 .resumo-line.total{border-bottom:none;border-top:2px solid var(--gold);margin-top:6px;padding-top:12px;font-size:17px;font-weight:700;}
@@ -559,6 +563,18 @@ function formatMoney(v){return v.toLocaleString("pt-BR",{style:"currency",curren
 function fmtDataBR(str){if(!str)return"";const d=new Date(str+"T12:00:00");if(isNaN(d))return"";return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"2-digit"});}
 function fmtTelefone(v){const n=v.replace(/\D/g,"").slice(0,11);if(n.length<=2)return n;if(n.length<=6)return "("+n.slice(0,2)+") "+n.slice(2);if(n.length<=10)return "("+n.slice(0,2)+") "+n.slice(2,6)+"-"+n.slice(6);return "("+n.slice(0,2)+") "+n.slice(2,7)+"-"+n.slice(7);}
 function fmtData(v){const n=v.replace(/\D/g,"").slice(0,8);if(n.length<=2)return n;if(n.length<=4)return n.slice(0,2)+"/"+n.slice(2);return n.slice(0,2)+"/"+n.slice(2,4)+"/"+n.slice(4);}
+// DD/MM/AAAA (texto digitado) -> AAAA-MM-DD (ISO, usado no resto do
+// app). Retorna null se a string nao estiver completa/for invalida
+// (nao confia so no formato - confere se o dia/mes/ano realmente existe,
+// ex.: 31/02 vira invalido, nao um dia de marco).
+function parseDataBR(v){
+  const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v||"");
+  if(!m)return null;
+  const dia=+m[1],mes=+m[2],ano=+m[3];
+  const d=new Date(ano,mes-1,dia);
+  if(d.getFullYear()!==ano||d.getMonth()!==mes-1||d.getDate()!==dia)return null;
+  return m[3]+"-"+m[2]+"-"+m[1];
+}
 function fmtDoc(v){const n=v.replace(/\D/g,"").slice(0,14);if(n.length<=11){if(n.length<=3)return n;if(n.length<=6)return n.slice(0,3)+"."+n.slice(3);if(n.length<=9)return n.slice(0,3)+"."+n.slice(3,6)+"."+n.slice(6);return n.slice(0,3)+"."+n.slice(3,6)+"."+n.slice(6,9)+"-"+n.slice(9);}if(n.length<=2)return n;if(n.length<=5)return n.slice(0,2)+"."+n.slice(2);if(n.length<=8)return n.slice(0,2)+"."+n.slice(2,5)+"."+n.slice(5);if(n.length<=12)return n.slice(0,2)+"."+n.slice(2,5)+"."+n.slice(5,8)+"/"+n.slice(8);return n.slice(0,2)+"."+n.slice(2,5)+"."+n.slice(5,8)+"/"+n.slice(8,12)+"-"+n.slice(12);}
 function validaCPF(n){if(/^(\d)\1{10}$/.test(n))return false;let soma=0;for(let i=0;i<9;i++)soma+=+n[i]*(10-i);let resto=(soma*10)%11;if(resto>=10)resto=0;if(resto!==+n[9])return false;soma=0;for(let i=0;i<10;i++)soma+=+n[i]*(11-i);resto=(soma*10)%11;if(resto>=10)resto=0;return resto===+n[10];}
 function validaCNPJ(n){if(/^(\d)\1{13}$/.test(n))return false;const calc=tam=>{const nums=n.substring(0,tam);let soma=0,pos=tam-7;for(let i=tam;i>=1;i--){soma+=+nums[tam-i]*pos--;if(pos<2)pos=9;}const r=soma%11;return r<2?0:11-r;};if(calc(12)!==+n[12])return false;return calc(13)===+n[13];}
@@ -789,23 +805,45 @@ function stepIdade(){
 }
 
 // ==================== STEP: DATA ====================
-function stepData(){
+// deriva a mensagem de validacao + se o Continuar deve ficar habilitado -
+// usado no primeiro render E na atualizacao leve (atualizarDataEvento).
+function statusDataEvento(){
   const hojeStr=new Date().toISOString().split("T")[0];
-  const dataPassada=W.data&&W.data<hojeStr;
-  const dataBloqueada=!!(W.data&&DISP_ATUAL&&DISP_ATUAL.diasBloqueados&&DISP_ATUAL.diasBloqueados.includes(W.data));
-  const ok=W.data&&!dataPassada&&!dataBloqueada;
+  const dataISO=parseDataBR(W.dataDigitada);
+  const dataInvalida=(W.dataDigitada||"").length===10&&!dataISO;
+  const dataPassada=!!(dataISO&&dataISO<hojeStr);
+  const dataBloqueada=!!(dataISO&&DISP_ATUAL&&DISP_ATUAL.diasBloqueados&&DISP_ATUAL.diasBloqueados.includes(dataISO));
+  const ok=!!(dataISO&&!dataPassada&&!dataBloqueada);
+  let msg="";
+  if(dataInvalida)msg='<p class="msg-error">Data inválida — confira o dia e o mês.</p>';
+  else if(dataPassada)msg='<p class="msg-error">A data do evento não pode ser anterior a hoje.</p>';
+  else if(dataBloqueada)msg='<p class="msg-error">'+ICON_WARN+' Não temos disponibilidade para esta data. Escolha outro dia ou fale com a gente pelo WhatsApp.</p>';
+  else if(dataISO===hojeStr)msg='<p class="msg-error">'+ICON_WARN+' Pedidos para o mesmo dia estão sujeitos à disponibilidade de estoque e logística.</p>';
+  return{dataISO,ok,msg};
+}
+function stepData(){
+  const{ok,msg}=statusDataEvento();
   return `
     ${ICON_CALENDAR}
     <h2 class="step-title hand">Data do Evento</h2>
     <p class="step-sub">Pra qual dia você quer o chopp? A disponibilidade dos estilos e equipamentos depende da data escolhida.</p>
-    <div class="field"><label>Data do evento</label><input type="date" id="inpData" min="${hojeStr}" value="${W.data||""}"></div>
-    ${dataPassada?'<p class="msg-error">A data do evento não pode ser anterior a hoje.</p>':""}
-    ${dataBloqueada?'<p class="msg-error">'+ICON_WARN+' Não temos disponibilidade para esta data. Escolha outro dia ou fale com a gente pelo WhatsApp.</p>':""}
-    ${W.data===hojeStr?'<p class="msg-error">'+ICON_WARN+' Pedidos para o mesmo dia estão sujeitos à disponibilidade de estoque e logística.</p>':""}
+    <div class="field"><label>Data do evento</label><input type="text" inputmode="numeric" id="inpData" placeholder="DD/MM/AAAA" value="${W.dataDigitada||""}" maxlength="10"></div>
+    <span id="msgData">${msg}</span>
     <div class="step-nav">
       <span></span>
       <button class="cta-btn hand" id="btnNext" ${ok?"":"disabled"}>Continuar ${ICON_ARROW_RIGHT}</button>
     </div>`;
+}
+// so atualiza a mensagem + o estado do botao (nunca reconstroi o card) -
+// mesmo motivo do passo "Seus dados": full render() a cada tecla troca o
+// elemento do botao Continuar bem na hora que o usuario for tocar nele.
+function atualizarDataEvento(){
+  const{dataISO,ok,msg}=statusDataEvento();
+  W.data=dataISO||"";
+  const el=document.getElementById("msgData");
+  if(el)el.innerHTML=msg;
+  const btn=document.getElementById("btnNext");
+  if(btn)btn.disabled=!ok;
 }
 
 // ==================== STEP: MODALIDADE ====================
@@ -1223,7 +1261,7 @@ function stepResumo(){
 
     <div class="step-nav">
       <button class="cta-btn ghost hand" onclick="back()">${ICON_ARROW_LEFT} Voltar</button>
-      <button class="cta-btn hand" style="flex:0 1 auto;white-space:normal;text-align:center;padding:13px 20px" onclick="confirmarPedido()">Confirmar no WhatsApp ${ICON_ARROW_RIGHT}</button>
+      <button class="cta-btn hand" onclick="confirmarPedido()">Confirmar no WhatsApp ${ICON_ARROW_RIGHT}</button>
     </div>
     <div id="confirmArea"></div>`;
 }
@@ -1387,7 +1425,16 @@ function wireStep(atual){
   if(btn && !btn.onclick) btn.addEventListener("click",()=>next());
 
   if(atual==="data"){
-    document.getElementById("inpData").addEventListener("change",e=>{W.data=e.target.value;render();});
+    // campo digitado (DD/MM/AAAA), nao mais <input type=date>: o seletor
+    // nativo do iOS as vezes ja preenche/confirma "hoje" so de abrir o
+    // calendario, sem o usuario escolher nada, alem de nao caber direito
+    // na largura do cartao no celular. Mesmo padrao ja usado (e ja
+    // comprovado) no campo de Data de Nascimento.
+    document.getElementById("inpData").addEventListener("input",e=>{
+      e.target.value=fmtData(e.target.value);
+      W.dataDigitada=e.target.value;
+      atualizarDataEvento();
+    });
   }
   if(atual==="barris"){
     card.querySelectorAll("[data-barril-inc]").forEach(b=>b.addEventListener("click",()=>{
