@@ -216,7 +216,7 @@ body.gate-blocked #wizard.active{min-height:100vh;display:flex;align-items:cente
 .data-input-row input{flex:1;min-width:0;}
 .cal-toggle-btn{flex:0 0 auto;width:44px;border-radius:6px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.04);color:var(--gold);display:flex;align-items:center;justify-content:center;}
 .cal-toggle-btn.on{border-color:var(--brass);background:rgba(201,138,75,0.16);}
-.calendario-popover{position:absolute;z-index:20;top:calc(100% + 8px);left:0;right:0;background:var(--ground-alt2);border:1px solid var(--brass);border-radius:10px;padding:12px;box-shadow:0 10px 24px rgba(0,0,0,0.5);}
+.calendario-popover{position:absolute;z-index:20;top:calc(100% + 8px);left:0;width:min(320px,100%);background:var(--ground-alt2);border:1px solid var(--brass);border-radius:10px;padding:12px;box-shadow:0 10px 24px rgba(0,0,0,0.5);}
 .cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
 .cal-titulo{font-family:'Kalam',cursive;font-weight:700;font-size:15px;color:var(--chalk);}
 .cal-nav{width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.18);background:transparent;color:var(--chalk);display:flex;align-items:center;justify-content:center;}
@@ -283,7 +283,7 @@ body.gate-blocked #wizard.active{min-height:100vh;display:flex;align-items:cente
 .toggle-opt.on{border-color:var(--gold);background:rgba(201,162,39,0.12);color:var(--gold);}
 
 /* ---- stepper (diarias, qtd copos) ---- */
-.stepper{display:flex;align-items:center;gap:14px;background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.14);border-radius:8px;padding:0 14px;height:46px;}
+.stepper{display:flex;align-items:center;gap:14px;background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.14);border-radius:8px;padding:10px 14px;min-height:46px;}
 .stepper .lbl{flex:1;font-size:13.5px;color:var(--chalk-dim);}
 .qty-btn{width:28px;height:28px;border-radius:50%;border:1px solid var(--brass);background:transparent;color:var(--chalk);display:flex;align-items:center;justify-content:center;}
 .qty-btn:disabled{opacity:0.35;cursor:not-allowed;}
@@ -1016,7 +1016,7 @@ function stepBarris(){
         </div>`).join("")}
     </div>
     ${W.modalidade==="delivery"?`
-    <div class="stepper" style="margin-top:14px">
+    <div class="stepper" style="margin:14px 0">
       <span class="lbl">Copos extra (${t.tirasGratis} tira${t.tirasGratis===1?"":"s"} grátis inclusa${t.tirasGratis===1?"":"s"}, +${formatMoney(PRECO_TIRA_COPOS)}/tira extra)</span>
       <button class="qty-btn" data-copos-dec>${ICON_MINUS}</button>
       <span class="qty-val">${W.copsExtras||0}</span>
@@ -1117,7 +1117,7 @@ function stepEvento(){
         </select>
       </div>
       <div class="field"><label>Quantidade de diárias</label>
-        <div class="stepper" style="height:46px">
+        <div class="stepper" style="height:46px;padding:0 14px">
           <button class="qty-btn" data-diaria-dec>${ICON_MINUS}</button>
           <span class="qty-val" style="flex:1;text-align:center">${diarias}</span>
           <button class="qty-btn add" data-diaria-inc>${ICON_PLUS}</button>
