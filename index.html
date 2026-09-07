@@ -354,7 +354,7 @@ footer p{color:var(--chalk-dim);font-size:12.5px;margin:12px 0 0;}
 <footer class="chalkboard">
   <div class="brand"><img id="img-logo2" alt="Farra Bier" style="height:30px" /><span class="brand-word">FARRA <b>BIER</b></span></div>
   <div class="brass-rail" style="max-width:200px;margin:0 auto"></div>
-  <p>Protótipo visual — Farra Bier © 2026</p>
+  <p>Farra Bier © 2026 <span style="opacity:0.7">— Atualizado em 07/09/2026 às 11:21</span></p>
 </footer>
 
 <a class="wa-fab" id="waFab" href="#" target="_blank" rel="noopener noreferrer" aria-label="Falar no WhatsApp">
@@ -1099,13 +1099,32 @@ function stepContratante(){
     </div>
     <div class="row2">
       <div class="field"><label>Data de nascimento</label><input type="text" inputmode="numeric" id="inpNascimento" placeholder="DD/MM/AAAA" value="${W.nascimento||""}" maxlength="10">
-        ${idade!==null?(maior?`<p class="msg-ok">Idade: ${idade} anos</p>`:`<p class="msg-error">É necessário ser maior de 18 anos (idade: ${idade} anos)</p>`):W.nascimento?`<p class="msg-error">Data incompleta — confira se o ano tem os 4 dígitos (ex: 24/10/1990)</p>`:""}
+        <span id="msgNascimento">${idade!==null?(maior?`<p class="msg-ok">Idade: ${idade} anos</p>`:`<p class="msg-error">É necessário ser maior de 18 anos (idade: ${idade} anos)</p>`):W.nascimento?`<p class="msg-error">Data incompleta — confira se o ano tem os 4 dígitos (ex: 24/10/1990)</p>`:""}</span>
       </div>
       <div class="field"><label>CPF / CNPJ</label><input type="text" inputmode="numeric" id="inpCpf" value="${W.cpfcnpj||""}" maxlength="18">
-        ${docStatus==="ok"?'<p class="msg-ok">'+ICON_CHECK_SM+' Documento válido</p>':docStatus==="invalido"?'<p class="msg-error">CPF/CNPJ inválido</p>':docStatus==="curto"?'<p class="msg-error">Faltam dígitos — informe o CPF (11) ou CNPJ (14) completo</p>':""}
+        <span id="msgCpf">${docStatus==="ok"?'<p class="msg-ok">'+ICON_CHECK_SM+' Documento válido</p>':docStatus==="invalido"?'<p class="msg-error">CPF/CNPJ inválido</p>':docStatus==="curto"?'<p class="msg-error">Faltam dígitos — informe o CPF (11) ou CNPJ (14) completo</p>':""}</span>
       </div>
     </div>
     ${navHtml(ok)}`;
+}
+// Atualiza SO as mensagens de validacao + o estado do botao Continuar,
+// sem reconstruir o card inteiro - fazer innerHTML do card inteiro num
+// blur/input desse passo troca o proprio elemento do botao logo antes do
+// usuario tocar nele, e no mobile isso as vezes "engole" o primeiro
+// toque (o usuario precisa tocar 2x). Nunca mexe no campo que o usuario
+// esta digitando nem no foco.
+function atualizarContratante(){
+  const idade=W.nascimento&&W.nascimento.length===10?calcularIdade(W.nascimento):null;
+  const maior=idade!==null&&idade>=18;
+  const docStatus=estadoDoc(W.cpfcnpj);
+  const emailOk=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(W.email||"");
+  const ok=W.nome&&W.telefone&&W.nascimento&&maior&&docStatus==="ok"&&emailOk;
+  const msgNasc=document.getElementById("msgNascimento");
+  if(msgNasc)msgNasc.innerHTML=idade!==null?(maior?`<p class="msg-ok">Idade: ${idade} anos</p>`:`<p class="msg-error">É necessário ser maior de 18 anos (idade: ${idade} anos)</p>`):W.nascimento?`<p class="msg-error">Data incompleta — confira se o ano tem os 4 dígitos (ex: 24/10/1990)</p>`:"";
+  const msgCpf=document.getElementById("msgCpf");
+  if(msgCpf)msgCpf.innerHTML=docStatus==="ok"?'<p class="msg-ok">'+ICON_CHECK_SM+' Documento válido</p>':docStatus==="invalido"?'<p class="msg-error">CPF/CNPJ inválido</p>':docStatus==="curto"?'<p class="msg-error">Faltam dígitos — informe o CPF (11) ou CNPJ (14) completo</p>':"";
+  const btn=document.getElementById("btnNext");
+  if(btn)btn.disabled=!ok;
 }
 
 // ==================== STEP: PAGAMENTO ====================
@@ -1382,18 +1401,18 @@ function wireStep(atual){
     if(hr)hr.addEventListener("change",e=>{W.horaRecolha=e.target.value;render();});
   }
   if(atual==="contratante"){
-    document.getElementById("inpNome").addEventListener("input",e=>W.nome=e.target.value);
-    document.getElementById("inpTelefone").addEventListener("input",e=>{e.target.value=fmtTelefone(e.target.value);W.telefone=e.target.value;});
-    document.getElementById("inpEmail").addEventListener("input",e=>{W.email=e.target.value;});
-    // setTimeout(0): deixa o navegador terminar de mover o foco (Tab) antes
-    // de reconstruir o innerHTML do card - senao o re-render destroi o campo
-    // de destino do Tab no meio da troca de foco e o cursor "pula" pra
-    // qualquer lugar (bug relatado: Tab no E-mail voltava pro Nome).
-    document.getElementById("inpEmail").addEventListener("blur",()=>setTimeout(render,0));
-    document.getElementById("inpNascimento").addEventListener("input",e=>{e.target.value=fmtData(e.target.value);W.nascimento=e.target.value;if(e.target.value.length===10)render();});
-    document.getElementById("inpNascimento").addEventListener("blur",()=>setTimeout(render,0));
-    document.getElementById("inpCpf").addEventListener("input",e=>{e.target.value=fmtDoc(e.target.value);W.cpfcnpj=e.target.value;if(estadoDoc(e.target.value)!=="curto")render();});
-    document.getElementById("inpCpf").addEventListener("blur",()=>setTimeout(render,0));
+    document.getElementById("inpNome").addEventListener("input",e=>{W.nome=e.target.value;atualizarContratante();});
+    document.getElementById("inpTelefone").addEventListener("input",e=>{e.target.value=fmtTelefone(e.target.value);W.telefone=e.target.value;atualizarContratante();});
+    document.getElementById("inpEmail").addEventListener("input",e=>{W.email=e.target.value;atualizarContratante();});
+    // so atualiza mensagens/botao (nunca reconstroi o card inteiro) - um
+    // innerHTML do card inteiro num blur/input desse passo troca o
+    // proprio elemento do botao Continuar bem na hora que o usuario vai
+    // tocar nele, e no mobile isso "engole" o primeiro toque (bug
+    // relatado: precisa tocar 2x em Continuar). Tambem elimina o bug
+    // antigo de foco (Tab no E-mail voltava pro Nome), ja que o campo
+    // que recebe o foco nunca e substituido.
+    document.getElementById("inpNascimento").addEventListener("input",e=>{e.target.value=fmtData(e.target.value);W.nascimento=e.target.value;atualizarContratante();});
+    document.getElementById("inpCpf").addEventListener("input",e=>{e.target.value=fmtDoc(e.target.value);W.cpfcnpj=e.target.value;atualizarContratante();});
   }
 }
 
